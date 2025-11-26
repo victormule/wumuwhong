@@ -1,163 +1,151 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Wumuchong</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
-    /* Message d'erreur visible pour l'utilisateur */
-    .error {
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #ff4444;
-      color: white;
-      padding: 15px;
-      border-radius: 8px;
-      font-family: Arial, sans-serif;
-      display: none;
-      z-index: 1000;
-    }
-  </style>
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
-      "GLTFLoader": "https://unpkg.com/three@0.155.0/examples/jsm/loaders/GLTFLoader.js",
-      "OrbitControls": "https://unpkg.com/three@0.155.0/examples/jsm/controls/OrbitControls.js"
-    }
-  }
-  </script>
+    <meta charset="UTF-8">
+    <title>Visualiseur 3D Wumuchong</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { height: 100vh; font-family: Arial, sans-serif; }
+        canvas { display: block; width: 100%; height: 100%; }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            z-index: 100;
+        }
+        .error { background: rgba(255, 68, 68, 0.9); }
+        .loading { background: rgba(68, 150, 255, 0.9); }
+    </style>
+    <!-- Import de Three.js via importmap (standard) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.155.0/examples/jsm/"
+            }
+        }
+    </script>
 </head>
 <body>
-  <div class="error" id="errorMsg">❌ Échec du chargement du modèle 3D</div>
+    <div class="status loading" id="status">Chargement du modèle 3D...</div>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { GLTFLoader } from 'GLTFLoader';
-    import { OrbitControls } from 'OrbitControls';
+    <script type="module">
+        // Import des modules Three.js nécessaires
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    // === ÉLÉMENTS UTILES ===
-    const errorMsg = document.getElementById('errorMsg');
-    const modelPath = 'model/shiyun.glb'; // Confirmé : double g
+        // === CONFIGURATION BASIQUE ===
+        const MODEL_PATH = 'model/wumuchongg.glb'; // Chemin vers ton fichier
+        const MODEL_SCALE = 5; // Ajuste la taille si besoin
 
-    // === SCÈNE ===
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf0f0f0);
+        // === INITIALISATION DE LA SCÈNE 3D ===
+        // 1. Scène
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf5f5f5);
 
-    // === CAMERA ===
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
-    // On utilise directement startPosition (évite la redondance)
-    const startPosition = new THREE.Vector3(100, 100, 70);
-    const targetPosition = new THREE.Vector3(-5, 0, 5);
-    camera.position.copy(startPosition);
-    camera.lookAt(0, 0, 0);
+        // 2. Caméra (vue perspective)
+        const camera = new THREE.PerspectiveCamera(
+            75, // Angle de vue
+            window.innerWidth / window.innerHeight, // Ratio écran
+            0.1, // Distance minimale de rendu
+            1000 // Distance maximale de rendu
+        );
+        camera.position.z = 15; // Position initiale de la caméra
 
-    // === RENDERER ===
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      powerPreference: "high-performance" // Meilleur pour Netlify
-    });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(renderer.domElement);
+        // 3. Renderer (affichage)
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
 
-    // === CONTROLS ===
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05; // Plus fluide
+        // 4. Contrôles (rotation/zoom avec la souris)
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // Mouvements fluides
+        controls.dampingFactor = 0.05;
 
-    // === LUMIÈRES ===
-    const light = new THREE.DirectionalLight(0xffffff, 3.5);
-    light.position.set(50, 40, 30);
-    light.castShadow = true;
-    light.shadow.mapSize.set(2048, 2048);
-    light.shadow.camera.left = -50;
-    light.shadow.camera.right = 50;
-    light.shadow.camera.top = 50;
-    light.shadow.camera.bottom = -50;
-    light.shadow.camera.near = 1;
-    light.shadow.camera.far = 100;
-    scene.add(light);
+        // === LUMIÈRES (essentielles pour voir le modèle) ===
+        // Lumière ambiante (éclairage général)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambient);
+        // Lumière directionnelle (simule le soleil)
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
 
-    // === SOL (pour voir les ombres + confirmer que Three.js fonctionne) ===
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 200),
-      new THREE.MeshStandardMaterial({ color: 0xe0e0e0 })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -10;
-    ground.receiveShadow = true;
-    scene.add(ground);
+        // === CHARGEMENT DU MODÈLE GLB ===
+        const loader = new GLTFLoader();
+        const statusElement = document.getElementById('status');
 
-    // === CHARGEMENT DU MODÈLE GLB ===
-    const loader = new GLTFLoader();
-    loader.load(
-      modelPath,
-      (gltf) => {
-        console.log('✅ Modèle chargé :', gltf);
-        const model = gltf.scene;
-        model.scale.set(5, 5, 5);
-        model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-          }
+        loader.load(
+            // Chemin du fichier
+            MODEL_PATH,
+
+            // Succès : modèle chargé
+            (gltf) => {
+                const model = gltf.scene;
+                
+                // Ajuster la taille du modèle
+                model.scale.set(MODEL_SCALE, MODEL_SCALE, MODEL_SCALE);
+                
+                // Centrer le modèle (optionnel mais pratique)
+                model.position.set(0, 0, 0);
+                
+                // Ajouter le modèle à la scène
+                scene.add(model);
+
+                // Mise à jour du statut
+                statusElement.textContent = "Modèle chargé ✅";
+                setTimeout(() => statusElement.style.display = 'none', 3000);
+
+                console.log("Modèle 3D chargé avec succès !");
+            },
+
+            // Progression du chargement (optionnel)
+            (xhr) => {
+                const pourcentage = Math.round((xhr.loaded / xhr.total) * 100);
+                statusElement.textContent = `Chargement : ${pourcentage}%`;
+            },
+
+            // Erreur de chargement
+            (error) => {
+                statusElement.className = "status error";
+                statusElement.textContent = "Erreur de chargement ❌";
+                console.error("ERREUR - Impossible de charger le modèle :", error);
+                console.error("Vérifiez :");
+                console.error("1. Chemin du fichier :", MODEL_PATH);
+                console.error("2. Fichier wumuchongg.glb existe dans le dossier 'model/'");
+                console.error("3. Aucune faute de frappe dans le nom du fichier");
+            }
+        );
+
+        // === ANIMATION (boucle de rendu) ===
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Mise à jour des contrôles (pour le damping)
+            controls.update();
+            
+            // Rendu de la scène
+            renderer.render(scene, camera);
+        }
+
+        // === ADAPTATION À LA TAILLE DE LA FENÊTRE ===
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
-        scene.add(model);
-      },
-      // Progression du chargement (pour debug)
-      (xhr) => {
-        const percent = Math.round((xhr.loaded / xhr.total) * 100);
-        console.log(`📥 Chargement : ${percent}%`);
-      },
-      // Gestion détaillée des erreurs
-      (error) => {
-        console.error('❌ Erreur complète :', error);
-        console.error('👉 Informations utiles :');
-        console.error('   - Chemin demandé :', modelPath);
-        console.error('   - URL complète :', window.location.origin + '/' + modelPath);
-        console.error('   - Vérifiez le fichier sur Netlify : https://app.netlify.com/sites/wumuchong/deploys');
-        errorMsg.style.display = 'block';
-        // Cacher le message après 10s
-        setTimeout(() => errorMsg.style.display = 'none', 10000);
-      }
-    );
 
-    // === ANIMATION DE LA CAMÉRA ===
-    let progress = 0;
-    const speed = 0.008;
-    let animationDone = false;
-
-    function animate() {
-      requestAnimationFrame(animate);
-
-      if (!animationDone && progress < 1) {
-        progress += speed;
-        camera.position.lerpVectors(startPosition, targetPosition, progress);
-        camera.lookAt(0, 0, 0); // Garder la caméra orientée vers le centre
-        if (progress >= 1) animationDone = true; // Arrêter l'animation
-      }
-
-      controls.update();
-      renderer.render(scene, camera);
-    }
-
-    animate();
-
-    // === ADAPTATION À LA FENÊTRE ===
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-  </script>
+        // Démarrer l'animation
+        animate();
+    </script>
 </body>
 </html>
+
 
